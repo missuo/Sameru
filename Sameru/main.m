@@ -7,9 +7,18 @@
 
 #import <Cocoa/Cocoa.h>
 
+#import "AppDelegate.h"
+
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
-        // Setup code that might create autoreleased objects goes here.
+        // No storyboard and no Dock icon: Sameru lives entirely in the menu bar.
+        static AppDelegate *delegate;
+        delegate = [[AppDelegate alloc] init];
+
+        NSApplication *application = NSApplication.sharedApplication;
+        application.delegate = delegate;
+        [application setActivationPolicy:NSApplicationActivationPolicyAccessory];
+        [application run];
     }
-    return NSApplicationMain(argc, argv);
+    return 0;
 }

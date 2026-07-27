@@ -1,0 +1,20 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.perspectivev3
+!default.perspectivev3
+
+# Signing material — never commit these
+*.p12
+*.mobileprovision
+*.cer
+*.certSigningRequest
+
+# macOS
+.DS_Store
