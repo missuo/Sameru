@@ -37,6 +37,12 @@ Applications.
 Builds are signed with a Developer ID certificate and notarized by Apple, so they
 open without a Gatekeeper warning.
 
+Sameru updates itself through [Sparkle](https://sparkle-project.org): it checks
+once a day and the panel's ↻ button checks on demand. Updates are verified against
+an EdDSA public key baked into the app, so a tampered download is rejected even if
+the feed itself is compromised. The feed lives at
+[`appcast.xml`](appcast.xml) on this branch.
+
 Requires macOS 14 or later on Apple silicon.
 
 ## Features

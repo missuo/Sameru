@@ -28,6 +28,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) void (^onStateChange)(void);
 /// Called when the panel wants its containing popover dismissed.
 @property (nonatomic, copy, nullable) void (^onRequestClose)(void);
+/// Called when the user asks Sparkle to look for a new version.
+@property (nonatomic, copy, nullable) void (^onCheckForUpdates)(void);
 
 /// Pulls fresh state into every control. Call before showing the panel.
 - (void)refresh;

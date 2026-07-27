@@ -13,6 +13,8 @@
 #import "SMRLoginItemController.h"
 #import "SMRPanelViewController.h"
 
+#import <Sparkle/Sparkle.h>
+
 @interface AppDelegate () <NSPopoverDelegate>
 
 @property (nonatomic, strong) NSStatusItem *statusItem;
@@ -23,6 +25,7 @@
 @property (nonatomic, strong) SMRCleanModeController *cleanModeController;
 @property (nonatomic, strong) SMRFanController *fanController;
 @property (nonatomic, strong) SMRLoginItemController *loginItemController;
+@property (nonatomic, strong) SPUStandardUpdaterController *updaterController;
 
 @end
 
@@ -40,6 +43,12 @@
     self.cleanModeController.onEnd = ^(NSString *message) {
         [weakSelf handleCleanModeEndedWithMessage:message];
     };
+
+    // startingUpdater:YES begins the scheduled background check described by
+    // SUEnableAutomaticChecks / SUScheduledCheckInterval in Info.plist.
+    self.updaterController = [[SPUStandardUpdaterController alloc] initWithStartingUpdater:YES
+                                                                          updaterDelegate:nil
+                                                                       userDriverDelegate:nil];
 
     [self buildStatusItem];
     [self buildPopover];
@@ -89,6 +98,10 @@
     };
     self.panelViewController.onRequestClose = ^{
         [weakSelf closePopover];
+    };
+    self.panelViewController.onCheckForUpdates = ^{
+        [weakSelf closePopover];
+        [weakSelf.updaterController checkForUpdates:nil];
     };
 
     self.popover = [[NSPopover alloc] init];

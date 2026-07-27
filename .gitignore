@@ -18,3 +18,7 @@ xcuserdata/
 
 # macOS
 .DS_Store
+
+# Release artifacts built locally
+*.dmg
+*.zip

@@ -126,6 +126,23 @@ jobs:
             echo "$target: hardened runtime + Developer ID confirmed"
           }
 
+          # Sparkle ships its own nested bundles. Each must carry the hardened
+          # runtime and a Developer ID signature, and they have to be signed
+          # before the framework that contains them, which in turn precedes the
+          # app. Deepest first.
+          SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+          if [ -d "$SPARKLE" ]; then
+            for nested in \
+              "$SPARKLE/Versions/B/XPCServices/Installer.xpc" \
+              "$SPARKLE/Versions/B/XPCServices/Downloader.xpc" \
+              "$SPARKLE/Versions/B/Updater.app"; do
+              sign "$nested"
+              assert_signed "$nested"
+            done
+            sign "$SPARKLE"
+            assert_signed "$SPARKLE"
+          fi
+
           sign "$HELPER"
           assert_signed "$HELPER"
 
@@ -206,6 +223,54 @@ jobs:
             || gh release upload "v$VERSION" \
                  "${{ steps.package.outputs.dmg }}" \
                  "${{ steps.package.outputs.zip }}" --clobber
+
+      # Sparkle's appcast lives on main and is what shipped copies poll. The zip is
+      # the update payload, so its EdDSA signature has to match the asset the
+      # release actually publishes.
+      - name: Generate and publish appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          SPARKLE_VERSION=2.9.4
+
+          curl -fsSL -o "$RUNNER_TEMP/sparkle.tar.xz" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          tar xf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
+
+          KEY_FILE="$RUNNER_TEMP/sparkle_ed_key"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$KEY_FILE"
+          trap 'rm -f "$KEY_FILE"' EXIT
+
+          mkdir -p "$RUNNER_TEMP/updates"
+          cp "${{ steps.package.outputs.zip }}" "$RUNNER_TEMP/updates/"
+
+          "$RUNNER_TEMP/sparkle/bin/generate_appcast" \
+            --ed-key-file "$KEY_FILE" \
+            --download-url-prefix "https://github.com/missuo/Sameru/releases/download/v$VERSION/" \
+            --link "https://github.com/missuo/Sameru" \
+            "$RUNNER_TEMP/updates"
+
+          # A tag build starts detached, so land the feed on main explicitly.
+          git fetch --depth=1 origin main
+          git checkout -B main origin/main
+          cp "$RUNNER_TEMP/updates/appcast.xml" appcast.xml
+
+          if git diff --quiet -- appcast.xml; then
+            echo "appcast.xml unchanged"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add appcast.xml
+            git commit -m "chore: update appcast for $VERSION"
+            git push origin main
+          fi
+
+          echo "--- appcast.xml ---"
+          cat appcast.xml
 
       - name: Clean up keychain
         if: always()

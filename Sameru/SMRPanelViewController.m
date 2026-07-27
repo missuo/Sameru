@@ -42,6 +42,70 @@ static const CGFloat kSMRCardCornerRadius = 10;
 
 @end
 
+#pragma mark - Quit button
+
+/// Quit affordance. The circle comes from the SF Symbol itself rather than from a
+/// layer we size ourselves, so it cannot end up as an oval; only the tint changes
+/// under the cursor.
+@interface SMRQuitButton : NSButton
+@end
+
+@implementation SMRQuitButton {
+    BOOL _hovered;
+    NSTrackingArea *_trackingArea;
+}
+
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) {
+        self.bordered = NO;
+        self.imagePosition = NSImageOnly;
+        self.symbolConfiguration = [NSImageSymbolConfiguration configurationWithPointSize:17
+                                                                                  weight:NSFontWeightRegular];
+        self.toolTip = NSLocalizedString(@"Quit Sameru", nil);
+        [self applyAppearance];
+    }
+    return self;
+}
+
+- (void)updateTrackingAreas {
+    [super updateTrackingAreas];
+
+    if (_trackingArea) {
+        [self removeTrackingArea:_trackingArea];
+    }
+    _trackingArea = [[NSTrackingArea alloc] initWithRect:self.bounds
+                                                options:NSTrackingMouseEnteredAndExited | NSTrackingActiveInActiveApp
+                                                  owner:self
+                                               userInfo:nil];
+    [self addTrackingArea:_trackingArea];
+}
+
+- (void)mouseEntered:(NSEvent *)event {
+    _hovered = YES;
+    [self applyAppearance];
+}
+
+- (void)mouseExited:(NSEvent *)event {
+    _hovered = NO;
+    [self applyAppearance];
+}
+
+- (void)viewDidChangeEffectiveAppearance {
+    [super viewDidChangeEffectiveAppearance];
+    [self applyAppearance];
+}
+
+- (void)applyAppearance {
+    // The filled variant on hover gives the press target obvious weight.
+    NSString *symbolName = _hovered ? @"xmark.circle.fill" : @"xmark.circle";
+    self.image = [NSImage imageWithSystemSymbolName:symbolName
+                          accessibilityDescription:NSLocalizedString(@"Quit Sameru", nil)];
+    self.contentTintColor = _hovered ? NSColor.systemRedColor : NSColor.tertiaryLabelColor;
+}
+
+@end
+
 #pragma mark - Panel
 
 @interface SMRPanelViewController ()
@@ -281,35 +345,56 @@ static const CGFloat kSMRCardCornerRadius = 10;
 }
 
 - (NSView *)makeFooterView {
-    NSImage *quitImage = [NSImage imageWithSystemSymbolName:@"xmark"
-                                   accessibilityDescription:NSLocalizedString(@"Quit Sameru", nil)];
+    NSString *version = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"?";
+    NSTextField *versionLabel =
+        [NSTextField labelWithString:[NSString stringWithFormat:@"v%@", version]];
+    versionLabel.font = [NSFont monospacedDigitSystemFontOfSize:11 weight:NSFontWeightRegular];
+    versionLabel.textColor = NSColor.tertiaryLabelColor;
+    versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    versionLabel.toolTip = [NSString stringWithFormat:NSLocalizedString(@"Build %@", nil),
+                            [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"?"];
 
-    NSButton *quitButton = [NSButton buttonWithImage:quitImage target:self action:@selector(quit:)];
-    quitButton.bordered = NO;
-    quitButton.imageScaling = NSImageScaleProportionallyDown;
-    quitButton.symbolConfiguration = [NSImageSymbolConfiguration configurationWithPointSize:12
-                                                                                     weight:NSFontWeightMedium];
-    quitButton.contentTintColor = NSColor.secondaryLabelColor;
-    quitButton.toolTip = NSLocalizedString(@"Quit Sameru", nil);
+    NSButton *updateButton =
+        [NSButton buttonWithImage:[NSImage imageWithSystemSymbolName:@"arrow.triangle.2.circlepath"
+                                           accessibilityDescription:NSLocalizedString(@"Check for Updates", nil)]
+                           target:self
+                           action:@selector(checkForUpdates:)];
+    updateButton.bordered = NO;
+    updateButton.symbolConfiguration = [NSImageSymbolConfiguration configurationWithPointSize:12
+                                                                                       weight:NSFontWeightMedium];
+    updateButton.contentTintColor = NSColor.tertiaryLabelColor;
+    updateButton.toolTip = NSLocalizedString(@"Check for Updates", nil);
+    updateButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [updateButton setContentHuggingPriority:NSLayoutPriorityRequired
+                             forOrientation:NSLayoutConstraintOrientationHorizontal];
+
+    SMRQuitButton *quitButton = [[SMRQuitButton alloc] initWithFrame:NSZeroRect];
+    quitButton.target = self;
+    quitButton.action = @selector(quit:);
     quitButton.translatesAutoresizingMaskIntoConstraints = NO;
     [quitButton setContentHuggingPriority:NSLayoutPriorityRequired
                            forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [quitButton setContentCompressionResistancePriority:NSLayoutPriorityRequired
+                                        forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [quitButton setContentCompressionResistancePriority:NSLayoutPriorityRequired
+                                        forOrientation:NSLayoutConstraintOrientationVertical];
 
-    // An empty leading view pushes the button to the trailing edge.
+    // An empty middle view pushes the version left and the button right.
     NSView *spacer = [[NSView alloc] initWithFrame:NSZeroRect];
     spacer.translatesAutoresizingMaskIntoConstraints = NO;
     [spacer setContentHuggingPriority:NSLayoutPriorityDefaultLow
                        forOrientation:NSLayoutConstraintOrientationHorizontal];
 
-    NSStackView *stack = [NSStackView stackViewWithViews:@[spacer, quitButton]];
+    NSStackView *stack = [NSStackView stackViewWithViews:@[versionLabel, updateButton, spacer, quitButton]];
     stack.orientation = NSUserInterfaceLayoutOrientationHorizontal;
     stack.alignment = NSLayoutAttributeCenterY;
     stack.distribution = NSStackViewDistributionFill;
+    stack.spacing = 6;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
 
     [NSLayoutConstraint activateConstraints:@[
-        [quitButton.widthAnchor constraintEqualToConstant:22],
-        [quitButton.heightAnchor constraintEqualToConstant:22],
+        [updateButton.widthAnchor constraintEqualToConstant:18],
+        [updateButton.heightAnchor constraintEqualToConstant:18],
         [spacer.heightAnchor constraintEqualToConstant:1]
     ]];
 
@@ -462,6 +547,12 @@ static const CGFloat kSMRCardCornerRadius = 10;
 
     sender.selectedSegment = [self segmentForMode:self.fanController.mode];
     [self refreshFanStatus];
+}
+
+- (void)checkForUpdates:(id)sender {
+    if (self.onCheckForUpdates) {
+        self.onCheckForUpdates();
+    }
 }
 
 - (void)quit:(id)sender {
