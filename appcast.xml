@@ -1,0 +1,16 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Sameru</title>
+        <item>
+            <title>1.0.2</title>
+            <pubDate>Mon, 27 Jul 2026 18:22:15 +0800</pubDate>
+            <link>https://github.com/missuo/Sameru</link>
+            <sparkle:version>5</sparkle:version>
+            <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/missuo/Sameru/releases/download/v1.0.2/Sameru-1.0.2.zip" length="2948263" type="application/octet-stream" sparkle:edSignature="Hx6rZ54PrSRiNbJ5soZKm5YVRKLE6nozzjbExKnJ7AKfG0sXNvXClNRcmoZ/umq58Vga7tVKnqE9xoPgDKMxCw=="/>
+        </item>
+    </channel>
+</rss>

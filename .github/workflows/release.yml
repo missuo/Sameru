@@ -284,12 +284,14 @@ jobs:
           git checkout -B main origin/main
           cp "$RUNNER_TEMP/updates/appcast.xml" appcast.xml
 
-          if git diff --quiet -- appcast.xml; then
+          # Stage first: git diff reports no change for an untracked file, which
+          # silently skipped the very first appcast.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add appcast.xml
+          if git diff --cached --quiet -- appcast.xml; then
             echo "appcast.xml unchanged"
           else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add appcast.xml
             git commit -m "chore: update appcast for $VERSION"
             git push origin main
           fi
