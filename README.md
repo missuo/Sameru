@@ -66,12 +66,22 @@ Three modes, one click each:
 | Mode | Effect |
 | --- | --- |
 | **Auto** | Hands the fans back to macOS (`F<n>Md = 0`) |
-| **Cool** | Pins every fan at 75% of its own maximum |
+| **Cool** | Pins every fan 40% of the way up its own range |
 | **Max** | Pins every fan at its hardware maximum (`F<n>Mx`) |
 
-Cool is a *fraction* rather than a fixed RPM because the ceiling differs per model —
-one MacBook Pro reports 5779 and 6241 RPM for its two fans, while other Macs top out
-well under 4000. Every target is clamped to that fan's reported min and max.
+Cool is a point along each fan's usable range — `min + 0.4 × (max − min)` — rather
+than a fixed RPM or a share of the ceiling, because **both** ends of that range vary
+per model:
+
+| | Floor (`F<n>Mn`) | Ceiling (`F<n>Mx`) | Cool |
+| --- | --- | --- | --- |
+| M1 Pro MacBook Pro | 1200 | 5779 / 6241 | 3032 / 3216 |
+| M4 Pro MacBook Pro | 2317 | 7826 | 4521 |
+
+A fixed RPM would sit barely above idle on a machine whose fans never drop below
+2317, and a share of the ceiling lands near full speed wherever the ceiling is high
+(75% of 7826 is 5870 RPM, which is not "cool"). Every target is clamped to that
+fan's own reported min and max.
 
 The panel shows live per-fan RPM and CPU temperature, refreshed every 2 seconds
 while it is open. The chosen mode is remembered, restored to Auto on quit, and
@@ -134,8 +144,8 @@ talk to the hardware, reimplemented here in Objective-C:
   session lock, display sleep and a tap the system disables
 
 Sameru differs in scope and in a few decisions: three features instead of forty,
-no plugin architecture, "cool" as a fraction of each fan's own maximum rather than
-a fixed RPM, and a popover panel instead of a menu.
+no plugin architecture, "cool" as a point along each fan's usable range rather
+than a fixed RPM, and a popover panel instead of a menu.
 
 ## License
 

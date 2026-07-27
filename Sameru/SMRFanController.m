@@ -8,7 +8,7 @@
 #import <AppKit/AppKit.h>
 #import <os/log.h>
 
-const double kSMRCoolSpeedFraction = 0.75;
+const double kSMRCoolRangeFraction = 0.4;
 
 /// Absolute guard rails, in case the SMC reports nonsense limits.
 static const NSInteger kSMRAbsoluteMinRPM = 500;
@@ -77,8 +77,8 @@ static NSString *SMRAppleScriptEscaped(NSString *value) {
 
     NSString *headline = (mode == SMRFanModeMax)
         ? NSLocalizedString(@"Maximum — hardware ceiling", nil)
-        : [NSString stringWithFormat:NSLocalizedString(@"Cool — %.0f%% of maximum", nil),
-           kSMRCoolSpeedFraction * 100];
+        : [NSString stringWithFormat:NSLocalizedString(@"Cool — %.0f%% into each fan's range", nil),
+           kSMRCoolRangeFraction * 100];
 
     NSInteger fanCount = self.snapshot.fanCount;
     if (fanCount == 0) {
@@ -145,7 +145,7 @@ static NSString *SMRAppleScriptEscaped(NSString *value) {
 
 - (BOOL)applyMode:(SMRFanMode)mode helperPath:(NSString *)helperPath error:(NSError **)error {
     NSInteger fanCount = MAX((NSInteger)1, self.snapshot.fanCount);
-    BOOL allSucceeded = YES;
+    NSMutableArray<NSString *> *failures = [NSMutableArray array];
 
     for (NSInteger index = 0; index < fanCount; index++) {
         NSArray<NSString *> *arguments;
@@ -157,19 +157,25 @@ static NSString *SMRAppleScriptEscaped(NSString *value) {
             arguments = @[@"set", @(index).stringValue, @(target).stringValue];
         }
 
-        if (![self runHelperAtPath:helperPath arguments:arguments]) {
-            allSucceeded = NO;
+        NSString *reason = nil;
+        if (![self runHelperAtPath:helperPath arguments:arguments failureReason:&reason]) {
+            // Keep the exact command in the message: which fan, and which target
+            // the SMC rejected, are the two things worth knowing here.
+            [failures addObject:[NSString stringWithFormat:@"Fan %ld (%@): %@",
+                                 (long)index,
+                                 [arguments componentsJoinedByString:@" "],
+                                 reason.length > 0 ? reason : NSLocalizedString(@"no reason reported", nil)]];
         }
     }
 
-    if (!allSucceeded && error) {
+    if (failures.count > 0 && error) {
         *error = [NSError errorWithDomain:kSMRFanErrorDomain
                                      code:100
                                  userInfo:@{NSLocalizedDescriptionKey:
-                                                NSLocalizedString(@"Some fans did not accept this mode.", nil)}];
+                                                [failures componentsJoinedByString:@"\n"]}];
     }
 
-    return allSucceeded;
+    return failures.count == 0;
 }
 
 - (NSInteger)targetRPMForMode:(SMRFanMode)mode fanIndex:(NSInteger)fanIndex {
@@ -185,7 +191,9 @@ static NSString *SMRAppleScriptEscaped(NSString *value) {
         fanMax = fanMin;
     }
 
-    NSInteger target = (mode == SMRFanModeMax) ? fanMax : (NSInteger)lround(fanMax * kSMRCoolSpeedFraction);
+    NSInteger target = (mode == SMRFanModeMax)
+        ? fanMax
+        : fanMin + (NSInteger)lround((fanMax - fanMin) * kSMRCoolRangeFraction);
     return MAX(fanMin, MIN(fanMax, target));
 }
 
@@ -335,7 +343,12 @@ static NSString *SMRAppleScriptEscaped(NSString *value) {
     return task.terminationStatus == 0;
 }
 
-- (BOOL)runHelperAtPath:(NSString *)path arguments:(NSArray<NSString *> *)arguments {
+/// Runs the helper and, on failure, hands back whatever it printed on stderr.
+/// The helper reports the precise SMC failure there ("Failed to write F0Md:
+/// 0x…"), which is the only useful thing to show the user.
+- (BOOL)runHelperAtPath:(NSString *)path
+              arguments:(NSArray<NSString *> *)arguments
+          failureReason:(NSString **)failureReason {
     NSTask *task = [[NSTask alloc] init];
     task.executableURL = [NSURL fileURLWithPath:path];
     task.arguments = arguments;
@@ -348,6 +361,9 @@ static NSString *SMRAppleScriptEscaped(NSString *value) {
     NSError *launchError = nil;
     if (![task launchAndReturnError:&launchError]) {
         os_log_error(OS_LOG_DEFAULT, "Sameru: fan helper launch failed: %{public}@", launchError.localizedDescription);
+        if (failureReason) {
+            *failureReason = launchError.localizedDescription;
+        }
         return NO;
     }
 
@@ -358,9 +374,17 @@ static NSString *SMRAppleScriptEscaped(NSString *value) {
         return YES;
     }
 
-    NSString *message = [[NSString alloc] initWithData:errorData encoding:NSUTF8StringEncoding];
+    NSString *message = [[[NSString alloc] initWithData:errorData encoding:NSUTF8StringEncoding]
+        stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     os_log_error(OS_LOG_DEFAULT, "Sameru: fan helper exited %d: %{public}@",
-                 task.terminationStatus, message ?: @"unknown");
+                 task.terminationStatus, message.length > 0 ? message : @"unknown");
+
+    if (failureReason) {
+        *failureReason = message.length > 0
+            ? message
+            : [NSString stringWithFormat:NSLocalizedString(@"helper exited with status %d", nil),
+               task.terminationStatus];
+    }
     return NO;
 }
 
