@@ -5,6 +5,14 @@ black out the screen so you can wipe it down, and pin the fans.
 
 Written in Objective-C, no dependencies.
 
+## Install
+
+Download the latest `.dmg` from [Releases](https://github.com/missuo/Sameru/releases)
+and drag Sameru to Applications. Builds are signed with a Developer ID certificate
+and notarized by Apple, so they open without a Gatekeeper warning.
+
+Requires macOS 14 or later.
+
 ## Features
 
 ### Keep Awake
@@ -58,8 +66,17 @@ in process.
 xcodebuild -project Sameru.xcodeproj -scheme Sameru -configuration Release build
 ```
 
-Requires Xcode 27 or later. The app is not sandboxed — event taps, launching the
-helper, and the privileged install cannot work inside the sandbox.
+The app is not sandboxed — event taps, launching the helper, and the privileged
+install cannot work inside the sandbox. It does run under the hardened runtime,
+which is what notarization requires.
+
+The project is stored in Xcode's format 77 so that released Xcode versions (and CI
+runners) can open it. Xcode 27 betas will silently rewrite it to format 110 on
+save, which nothing else can read — if a build starts failing with *"a future Xcode
+project file format"*, set `objectVersion` back to `77` in `project.pbxproj`.
+
+Tagging `v*` runs `.github/workflows/release.yml`, which signs the helper and app,
+notarizes and staples both the app and the DMG, and publishes a GitHub release.
 
 ## Layout
 
