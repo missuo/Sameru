@@ -110,3 +110,8 @@ talk to the hardware, reimplemented here in Objective-C:
 Sameru differs in scope and in a few decisions: three features instead of forty,
 no plugin architecture, "cool" as a fraction of each fan's own maximum rather than
 a fixed RPM, and a popover panel instead of a menu.
+
+## License
+
+[Apache 2.0](LICENSE), the same licence as MacTools, which parts of this code are
+derived from.
