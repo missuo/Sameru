@@ -1,9 +1,26 @@
 # Sameru
 
+**Keep awake. Keep cool.**
+
 A small macOS menu bar app with three things and nothing else: keep the Mac awake,
 black out the screen so you can wipe it down, and pin the fans.
 
 Written in Objective-C, no dependencies.
+
+## The name
+
+*Sameru* (さめる) is two Japanese verbs that happen to sound the same:
+
+- **覚める** — to wake, to stay awake → Keep Awake
+- **冷める** — to cool down → Fan Control
+
+One word covers both halves of what the app does, rather than bolting two
+unrelated ideas together — which is why it won over `Soyogi` (そよぎ, a light
+breeze), `Ibuki` (息吹, breath), and `Mezame` (目覚め, awakening). Written
+**Sameru**, occasionally **さめる**.
+
+Clean mode is the odd one out, but it follows from the other two: the app already
+has to hold the screen awake and swallow input to do its job.
 
 ## Install
 
