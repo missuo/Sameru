@@ -1,0 +1,212 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, without the leading v (e.g. 1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building Sameru $VERSION"
+
+      # AppIcon.icon needs an actool from Xcode 26 or newer, so pick the newest
+      # Xcode on the image rather than whatever is selected by default.
+      - name: Select newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          NEWEST=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$NEWEST"
+          xcodebuild -version
+          echo "SDK: $(xcrun --show-sdk-version --sdk macosx)"
+
+      - name: Import signing certificate
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+          echo -n "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/certificate.p12" \
+            -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
+          rm -f "$RUNNER_TEMP/certificate.p12"
+
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | grep 'Developer ID Application' | head -1 | sed -E 's/.*"(.+)"/\1/')
+          if [ -z "$IDENTITY" ]; then
+            echo "No Developer ID Application identity found in the keychain" >&2
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH" >&2
+            exit 1
+          fi
+          echo "SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "Signing as: $IDENTITY"
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -project Sameru.xcodeproj \
+            -scheme Sameru \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      # Sign inside out: the embedded helper first, then the app that wraps it.
+      # --deep is deprecated and would not apply the entitlements correctly here.
+      #
+      # Apple's timestamp service fails intermittently, and codesign leaves the
+      # previous (ad-hoc) signature in place when it does. That is invisible until
+      # notarization rejects the nested binary, so retry and then assert.
+      - name: Sign
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release/Sameru.app"
+          HELPER="$APP/Contents/Resources/SMCHelper/sameru-fan-helper"
+
+          sign() {
+            local target="$1"; shift
+            for attempt in 1 2 3 4 5; do
+              if codesign --force --timestamp --options runtime "$@" \
+                   --sign "$SIGNING_IDENTITY" "$target" 2>&1 | tee /tmp/codesign.log; then
+                if ! grep -q "timestamp service" /tmp/codesign.log; then
+                  return 0
+                fi
+              fi
+              echo "codesign attempt $attempt failed for $target, retrying in 10s"
+              sleep 10
+            done
+            echo "could not sign $target" >&2
+            return 1
+          }
+
+          assert_signed() {
+            local target="$1"
+            local info
+            info=$(codesign --display --verbose=4 "$target" 2>&1)
+            grep -q "flags=0x10000(runtime)" <<<"$info" \
+              || { echo "$target is missing the hardened runtime flag" >&2; echo "$info" >&2; exit 1; }
+            grep -q "Authority=Developer ID Application" <<<"$info" \
+              || { echo "$target is not signed with Developer ID" >&2; echo "$info" >&2; exit 1; }
+            echo "$target: hardened runtime + Developer ID confirmed"
+          }
+
+          sign "$HELPER"
+          assert_signed "$HELPER"
+
+          sign "$APP" --entitlements Sameru.entitlements
+          assert_signed "$APP"
+
+          codesign --verify --strict --deep --verbose=2 "$APP"
+          codesign --display --entitlements - "$APP"
+
+      - name: Notarize app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          APP="build/Build/Products/Release/Sameru.app"
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/Sameru-notarize.zip"
+
+          xcrun notarytool submit "$RUNNER_TEMP/Sameru-notarize.zip" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+
+      - name: Build DMG
+        id: package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          APP="build/Build/Products/Release/Sameru.app"
+          STAGE="$RUNNER_TEMP/dmg"
+          DMG="Sameru-$VERSION.dmg"
+
+          mkdir -p "$STAGE"
+          cp -R "$APP" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+
+          hdiutil create -volname "Sameru" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+          echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+
+          # A zip of the stapled app, for anyone who would rather not mount a disk image.
+          ditto -c -k --keepParent "$APP" "Sameru-$VERSION.zip"
+          echo "zip=Sameru-$VERSION.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Notarize DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit "${{ steps.package.outputs.dmg }}" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+
+          xcrun stapler staple "${{ steps.package.outputs.dmg }}"
+          xcrun stapler validate "${{ steps.package.outputs.dmg }}"
+
+      - name: Verify Gatekeeper acceptance
+        run: |
+          hdiutil attach "${{ steps.package.outputs.dmg }}" -mountpoint "$RUNNER_TEMP/mnt" -nobrowse
+          spctl --assess --type execute --verbose=4 "$RUNNER_TEMP/mnt/Sameru.app"
+          hdiutil detach "$RUNNER_TEMP/mnt"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "v$VERSION" \
+            --title "Sameru $VERSION" \
+            --generate-notes \
+            "${{ steps.package.outputs.dmg }}" \
+            "${{ steps.package.outputs.zip }}" \
+            || gh release upload "v$VERSION" \
+                 "${{ steps.package.outputs.dmg }}" \
+                 "${{ steps.package.outputs.zip }}" --clobber
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" || true

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Sameru is deliberately unsandboxed: it installs a setuid helper, drives a
+	  CGEventTap, and spawns /usr/bin/codesign. It still runs under the hardened
+	  runtime, which is what notarization requires.
+
+	  The Apple events entitlement covers the NSAppleScript "do shell script ...
+	  with administrator privileges" call that installs the fan helper.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+</dict>
+</plist>
