@@ -7,11 +7,20 @@ Written in Objective-C, no dependencies.
 
 ## Install
 
-Download the latest `.dmg` from [Releases](https://github.com/missuo/Sameru/releases)
-and drag Sameru to Applications. Builds are signed with a Developer ID certificate
-and notarized by Apple, so they open without a Gatekeeper warning.
+With Homebrew:
 
-Requires macOS 14 or later.
+```sh
+brew install --cask owo-network/brew/sameru
+```
+
+Or download the latest `.dmg` from
+[Releases](https://github.com/missuo/Sameru/releases) and drag Sameru to
+Applications.
+
+Builds are signed with a Developer ID certificate and notarized by Apple, so they
+open without a Gatekeeper warning.
+
+Requires macOS 14 or later on Apple silicon.
 
 ## Features
 
