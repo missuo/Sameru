@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 110;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -24,7 +24,7 @@
 		5A110000000000000000000B /* Embed SMC Helper */ = {
 			isa = PBXCopyFilesBuildPhase;
 			dstPath = SMCHelper;
-			dstSubfolder = Resources;
+			dstSubfolderSpec = 7;
 			files = (
 				5A110000000000000000000C /* sameru-fan-helper in Embed SMC Helper */,
 			);
