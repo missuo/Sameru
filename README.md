@@ -90,3 +90,23 @@ notarizes and staples both the app and the DMG, and publishes a GitHub release.
 | `Sameru/SMRSMCReader.m` | Read-only AppleSMC access |
 | `Sameru/SMRLoginItemController.m` | `SMAppService` login item |
 | `FanHelper/main.m` | Privileged SMC helper tool |
+
+## Credits
+
+Sameru is a much smaller take on ideas from
+[MacTools](https://github.com/ggbond268/MacTools) by ggbond268, which is licensed
+under Apache 2.0. The Swift plugins there were the reference for the parts that
+talk to the hardware, reimplemented here in Objective-C:
+
+- **SMC access** — the `SMCKeyData` struct layout, the `flt` / `fpe2` / `sp78`
+  encodings, and the `FNum` / `F<n>Ac` / `F<n>Mn` / `F<n>Mx` / `F<n>Md` / `F<n>Tg`
+  key handling
+- **The privileged helper** — shipping a small tool inside the bundle and
+  installing it setuid root behind a single authorization prompt, verifying it
+  against the bundled copy before each run
+- **Clean mode** — the `CGEventTap` structure, and the emergency exit paths for
+  session lock, display sleep and a tap the system disables
+
+Sameru differs in scope and in a few decisions: three features instead of forty,
+no plugin architecture, "cool" as a fraction of each fan's own maximum rather than
+a fixed RPM, and a popover panel instead of a menu.
